@@ -12,7 +12,7 @@
     <div class="upload-container">
         <h2>Sube o arrastra tu archivo ZIP</h2>
 
-        <form id="uploadForm" method="POST" action="{{ url('/api/comprimir') }}" enctype="multipart/form-data">
+        <form id="uploadForm" method="POST" action="https://8000--main--mccompressor--markos--ki1jluq18oa3g.pit-1.try.coder.app/api/comprimir" enctype="multipart/form-data">
             @csrf
             <div id="dropZone" class="drop-zone">
                 <p>Arrastra aquí un archivo ZIP o haz clic para seleccionar</p>
