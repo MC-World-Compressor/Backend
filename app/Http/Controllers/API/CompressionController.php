@@ -49,7 +49,7 @@ class CompressionController extends Controller
     public function compressWorld(Request $request)
     {
         $request->validate([
-            'zipfile' => 'required|file|mimes:zip',
+            'mundo_comprimido' => 'required|file|mimes:zip',
         ]);
 
         $uniqueId = Str::random(10);
@@ -61,10 +61,10 @@ class CompressionController extends Controller
         $outputZipPath = null;
 
         try {
-            $uploadedFile = $request->file('zipfile');
+            $uploadedFile = $request->file('mundo_comprimido');
 
             if (!$uploadedFile) {
-                throw new Exception("No se recibió ningún archivo ZIP. Asegúrese de que el campo del formulario se llame 'zipfile'.");
+                throw new Exception("No se recibió ningún archivo ZIP. Asegúrese de que el campo del formulario se llame 'mundo_comprimido'.");
             }
 
             if (!$uploadedFile->isValid()) {

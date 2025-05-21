@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\CompressionController;
+use App\Http\Controllers\API\ServidorController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -25,4 +26,7 @@ Route::middleware('api')->prefix('api')->group(function () {
     });
     
     Route::post('/comprimir', [CompressionController::class, 'compressWorld']);
+    Route::get('/cola', [ServidorController::class, 'getCola']);
+    Route::post('/subir', [ServidorController::class, 'subirMundo']);
+    
 });

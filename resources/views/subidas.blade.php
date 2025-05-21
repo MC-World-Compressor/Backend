@@ -12,11 +12,12 @@
     <div class="upload-container">
         <h2>Sube o arrastra tu archivo ZIP</h2>
 
-        <form id="uploadForm" method="POST" action="https://8000--main--mccompressor--markos--ki1jluq18oa3g.pit-1.try.coder.app/api/comprimir" enctype="multipart/form-data">
+        {{-- Usar url() helper para generar la URL es más flexible --}}
+        <form id="uploadForm" method="POST" action="https://8000--main--mccompressor--markos--ki1jluq18oa3g.pit-1.try.coder.app/api/subir" enctype="multipart/form-data">
             @csrf
             <div id="dropZone" class="drop-zone">
                 <p>Arrastra aquí un archivo ZIP o haz clic para seleccionar</p>
-                <input type="file" name="zipfile" id="zipfile" accept=".zip" hidden />
+                <input type="file" name="mundo_comprimido" id="mundo_comprimido" accept=".zip" hidden />
             </div>
             <button type="submit">Comprimir Mundo</button>
         </form>
@@ -26,7 +27,7 @@
 
     <script>
         const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('zipfile');
+        const fileInput = document.getElementById('mundo_comprimido');
         const form = document.getElementById('uploadForm');
         const resultDiv = document.getElementById('result');
 
@@ -57,7 +58,8 @@
             const response = await fetch(form.action, {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json' // Importante para recibir errores de validación como JSON
                 },
                 body: formData
             });
@@ -65,9 +67,21 @@
             const data = await response.json();
 
             if (response.ok) {
-                resultDiv.innerHTML = `<p>Archivo comprimido: <a href="${data.download_url}" target="_blank">Descargar aquí</a></p>`;
+                // Ajustado para mostrar más información del servidor subido
+                resultDiv.innerHTML = `<p>${data.message}</p>
+                                       <p>ID del Servidor: ${data.servidor_id}</p>
+                                       <p>Ruta: ${data.ruta_almacenada}</p>
+                                       <p>Enlace de descarga: <a href="${data.download_url}" target="_blank">Descargar aquí</a></p>`;
             } else {
-                resultDiv.textContent = data.error || 'Error al comprimir';
+                let errorMessage = data.message || data.error || 'Error al subir el archivo.';
+                if (data.errors) { // Para mostrar errores de validación de Laravel
+                    errorMessage += '<ul>';
+                    for (const key in data.errors) {
+                        errorMessage += `<li>${data.errors[key].join(', ')}</li>`;
+                    }
+                    errorMessage += '</ul>';
+                }
+                resultDiv.innerHTML = errorMessage; // Usar innerHTML para que las etiquetas <ul><li> se rendericen
             }
         });
     </script>
