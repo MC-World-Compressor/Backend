@@ -6,6 +6,7 @@ use App\Models\Servidor;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Exception;
+use App\Jobs\ProcesarMundoServidorJob;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 
@@ -46,10 +47,13 @@ class ServidorController extends Controller
                 'fecha_expiracion' => now()->addDay(),
             ]);
 
+            ProcesarMundoServidorJob::dispatch();
+
             return response()->json([
                 'message' => 'Mundo subido con éxito. En cola para la compresion...',
                 'servidor_id' => $servidor->id,
                 'ruta_almacenada' => $servidor->ruta, 
+                'estado' => $servidor->estado,
                 //'download_url' => Storage::disk('public')->url($servidor->ruta)
             ], 201);
 
