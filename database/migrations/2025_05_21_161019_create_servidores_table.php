@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('servidores', function (Blueprint $table) {
             $table->id();
-            $table->string('ruta');
+            $table->string('ruta')->nullable();
             $table->string('estado')->default('pendiente');
             $table->timestamp('fecha_expiracion')->nullable();
             $table->timestamp('fecha_creacion')->useCurrent();

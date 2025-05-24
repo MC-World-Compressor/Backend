@@ -28,5 +28,6 @@ Route::middleware('api')->prefix('api')->group(function () {
     Route::post('/comprimir', [CompressionController::class, 'compressWorld']);
     Route::get('/cola', [ServidorController::class, 'getCola']);
     Route::post('/subir', [ServidorController::class, 'subirMundo']);
+    Route::get('/status/{id}', [ServidorController::class, 'getStatus']);
     
 });

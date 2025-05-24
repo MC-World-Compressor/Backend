@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Aternos\Thanos\Thanos;
 use Aternos\Thanos\World\AnvilWorld;
 use Exception;
+use Symfony\Component\Process\Process;
 use Throwable;
 use Log;
 
@@ -80,8 +81,8 @@ class ProcesarMundoServidorJob implements ShouldQueue
 
             DB::transaction(function () {
                 $servidorParaProcesar = Servidor::where('estado', 'pendiente')
-                                                ->orderBy('created_at', 'asc') // Usar created_at
-                                                ->lockForUpdate()
+                                                ->orderBy('fecha_creacion', 'asc')
+                                                //->lockForUpdate()
                                                 ->first();
 
                 if ($servidorParaProcesar) {
@@ -98,7 +99,7 @@ class ProcesarMundoServidorJob implements ShouldQueue
 
             Log::info("Job ID: {$this->job->getJobId()} - Iniciando procesamiento para servidor ID: {$this->servidor->id}, ruta actual: {$this->servidor->ruta}");
 
-            $originalZipPublicPath = $this->servidor->ruta; // e.g., 'mundos_pendientes/world_xyz.zip'
+            $originalZipPublicPath = $this->servidor->ruta; // En ese momento en pendientes, Ej: 'mundos_pendientes/world_xyz.zip'
             $originalZipBaseName = basename($originalZipPublicPath);
             $originalFileNameWithoutExt = pathinfo($originalZipBaseName, PATHINFO_FILENAME);
 
@@ -107,7 +108,7 @@ class ProcesarMundoServidorJob implements ShouldQueue
             $optimizedWorldPath = storage_path('app/temp_job_optimized/' . $this->servidor->id . '_' . $uniqueId);
             
             $finalOptimizedZipDir = 'mundos_procesados';
-            $finalOptimizedZipName = Str::slug($originalFileNameWithoutExt) . '_optimizado_' . $uniqueId . '.zip';
+            $finalOptimizedZipName = Str::slug($originalFileNameWithoutExt) . '_comprimido.zip';
             $finalOptimizedZipPublicPath = $finalOptimizedZipDir . '/' . $finalOptimizedZipName;
 
             try {
@@ -133,13 +134,27 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 }
                 Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Directorio del mundo encontrado en {$worldSourcePath}");
 
-                Log::info("world path: ".$worldSourcePath." y oworldpath: ".$optimizedWorldPath);
+                $thanosCommand = [
+                    'php', // O la ruta completa de PHP CLI si es necesario
+                    base_path('thanos/thanos.php'), // Ruta al script CLI de Thanos
+                    $worldSourcePath,
+                    $optimizedWorldPath
+                ];
 
-                $world = new AnvilWorld($worldSourcePath, $optimizedWorldPath);
-                $thanos = new Thanos();
-                $thanos->setMinInhabitedTime(1); // Elimina chunks con InhabitedTime = 0
-                Log::info("1");
-                $removedChunks = $thanos->snap($world);
+                Log::info("Job ID: {$this->job->getJobId()} - Ejecutando comando Thanos: " . implode(' ', $thanosCommand));
+
+                $process = new Process($thanosCommand);
+                $process->setTimeout(null); // Permitir que el proceso de Thanos se ejecute sin el timeout de Symfony Process, el timeout del job de Laravel lo controlará.
+                                         // O establece un timeout específico para el proceso de Thanos: $process->setTimeout(1100); (un poco menos que el timeout del job)
+                $process->setWorkingDirectory(base_path()); // Ejecutar desde la raíz del proyecto
+
+                $process->run(); // Ejecución síncrona
+
+                if (!$process->isSuccessful()) {
+                    throw new Exception("El proceso de Thanos falló: " . $process->getErrorOutput() . " Salida: " . $process->getOutput());
+                }
+                // Nos conformaremos con el log de éxito o la ausencia de error porque no hay respuesta de chunks.
+                $removedChunks = "N/A (ejecutado como proceso externo)"; // O intenta parsear la salida si es necesario
                 Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Thanos optimizó el mundo, removió {$removedChunks} chunks. Salida en {$optimizedWorldPath}");
 
                 if (!File::exists($optimizedWorldPath) || count(File::allFiles($optimizedWorldPath)) === 0) {

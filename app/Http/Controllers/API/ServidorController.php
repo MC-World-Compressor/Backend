@@ -62,4 +62,26 @@ class ServidorController extends Controller
         }
     }
 
+    public function getStatus(Request $request){
+        $id = $request->route('id');
+        $servidor = Servidor::find($id);
+
+        if (!$servidor) {
+            return response()->json(['error' => 'Servidor no encontrado'], 404);
+        }
+
+        if($servidor->estado == 'listo')
+            return response()->json([
+                'estado' => $servidor->estado,
+                'ruta' => $servidor->ruta,
+                'fecha_expiracion' => $servidor->fecha_expiracion,
+                'fecha_creacion' => $servidor->fecha_creacion,
+            ]);
+        else if($servidor->estado == 'expirado' || $servidor->estado == 'pendiente')
+            return response()->json([
+                'estado' => $servidor->estado,]);
+        else //return error
+            return response()->json(['error' => 'Error al procesar el servidor'], 404);
+    }
+
 }
