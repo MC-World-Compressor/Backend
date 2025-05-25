@@ -23,6 +23,7 @@ class ServidorController extends Controller
         ]);
 
         try {
+            $storedPath = null;
             $uploadedFile = $request->file('mundo_comprimido');
 
             if (!$uploadedFile->isValid()) {
@@ -52,12 +53,15 @@ class ServidorController extends Controller
             return response()->json([
                 'message' => 'Mundo subido con éxito. En cola para la compresion...',
                 'servidor_id' => $servidor->id,
-                'ruta_almacenada' => $servidor->ruta, 
+                //'ruta_almacenada' => $servidor->ruta, 
                 'estado' => $servidor->estado,
                 //'download_url' => Storage::disk('public')->url($servidor->ruta)
             ], 201);
 
         } catch (Exception $e) {
+            if (isset($storedPath) && $storedPath && Storage::disk('public')->exists($storedPath)) {
+                Storage::disk('public')->delete($storedPath);
+            }
             return response()->json(['error' => 'Ocurrió un error al subir el mundo: ' . $e->getMessage()], 500);
         }
     }
@@ -73,7 +77,8 @@ class ServidorController extends Controller
         if($servidor->estado == 'listo')
             return response()->json([
                 'estado' => $servidor->estado,
-                'ruta' => $servidor->ruta,
+                //'ruta' => $servidor->ruta,
+                'download_url' => Storage::disk('public')->url($servidor->ruta),
                 'fecha_expiracion' => $servidor->fecha_expiracion,
                 'fecha_creacion' => $servidor->fecha_creacion,
             ]);

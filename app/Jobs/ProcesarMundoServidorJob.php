@@ -25,6 +25,9 @@ class ProcesarMundoServidorJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected ?Servidor $servidor = null;
+    protected ?string $originalZipPublicPath = null;
+    protected ?string $extractionPath = null;
+    protected ?string $optimizedWorldPath = null;
 
     /**
      * El número de segundos que el job puede ejecutarse antes de que se agote el tiempo de espera.
@@ -66,6 +69,26 @@ class ProcesarMundoServidorJob implements ShouldQueue
     }
 
     /**
+     * Limpia el archivo ZIP original de la carpeta 'mundos_pendientes'.
+     */
+    private function cleanupOriginalZip(): void
+    {
+        $jobId = $this->job ? $this->job->getJobId() : 'N/A_JOB_ID_CLEANUP';
+        $servidorId = $this->servidor ? $this->servidor->id : 'N/A_SERVIDOR_ID_CLEANUP';
+
+        if ($this->originalZipPublicPath && Storage::disk('public')->exists($this->originalZipPublicPath)) {
+            try {
+                Storage::disk('public')->delete($this->originalZipPublicPath);
+                Log::info("Job ID: {$jobId} - Servidor ID {$servidorId}: ZIP original {$this->originalZipPublicPath} eliminado de 'mundos_pendientes' debido a error.");
+            } catch (Throwable $e) {
+                Log::error("Job ID: {$jobId} - Servidor ID {$servidorId}: Error al intentar eliminar el ZIP original {$this->originalZipPublicPath} de 'mundos_pendientes': " . $e->getMessage());
+            }
+        } else if ($this->originalZipPublicPath) {
+            Log::info("Job ID: {$jobId} - Servidor ID {$servidorId}: ZIP original {$this->originalZipPublicPath} no encontrado en 'mundos_pendientes' para eliminar (posiblemente ya procesado/eliminado o nunca existió allí con este nombre).");
+        }
+    }
+
+    /**
      * Execute the job.
      *
      * @return void
@@ -97,40 +120,40 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 return;
             }
 
-            Log::info("Job ID: {$this->job->getJobId()} - Iniciando procesamiento para servidor ID: {$this->servidor->id}, ruta actual: {$this->servidor->ruta}");
+            $this->originalZipPublicPath = $this->servidor->ruta; // Ej: 'mundos_pendientes/world_xyz.zip'
+            // Loguear después de asignar originalZipPublicPath para asegurar que se usa el valor correcto en el log
+            Log::info("Job ID: {$this->job->getJobId()} - Iniciando procesamiento para servidor ID: {$this->servidor->id}, ruta original ZIP: {$this->originalZipPublicPath}");
 
-            $originalZipPublicPath = $this->servidor->ruta; // En ese momento en pendientes, Ej: 'mundos_pendientes/world_xyz.zip'
-            $originalZipBaseName = basename($originalZipPublicPath);
+            $originalZipBaseName = basename($this->originalZipPublicPath);
             $originalFileNameWithoutExt = pathinfo($originalZipBaseName, PATHINFO_FILENAME);
-
             $uniqueId = Str::random(10);
-            $extractionPath = storage_path('app/temp_job_extractions/' . $this->servidor->id . '_' . $uniqueId);
-            $optimizedWorldPath = storage_path('app/temp_job_optimized/' . $this->servidor->id . '_' . $uniqueId);
+            $this->extractionPath = storage_path('app/temp_job_extractions/' . $this->servidor->id . '_' . $uniqueId);
+            $this->optimizedWorldPath = storage_path('app/temp_job_optimized/' . $this->servidor->id . '_' . $uniqueId);
             
             $finalOptimizedZipDir = 'mundos_procesados';
             $finalOptimizedZipName = Str::slug($originalFileNameWithoutExt) . '_comprimido.zip';
             $finalOptimizedZipPublicPath = $finalOptimizedZipDir . '/' . $finalOptimizedZipName;
 
             try {
-                if (!Storage::disk('public')->exists($originalZipPublicPath)) {
-                    throw new Exception("El archivo ZIP original '{$originalZipPublicPath}' no se encontró en el disco público.");
+                if (!Storage::disk('public')->exists($this->originalZipPublicPath)) {
+                    throw new Exception("El archivo ZIP original '{$this->originalZipPublicPath}' no se encontró en el disco público.");
                 }
-                $fullPathOriginalZip = Storage::disk('public')->path($originalZipPublicPath);
+                $fullPathOriginalZip = Storage::disk('public')->path($this->originalZipPublicPath);
 
-                File::makeDirectory($extractionPath, 0755, true, true);
-                File::makeDirectory($optimizedWorldPath, 0755, true, true);
+                File::makeDirectory($this->extractionPath, 0755, true, true);
+                File::makeDirectory($this->optimizedWorldPath, 0755, true, true);
 
                 $zip = new ZipArchive;
                 if ($zip->open($fullPathOriginalZip) !== TRUE) {
                     throw new Exception("No se pudo abrir el archivo ZIP original: {$fullPathOriginalZip}");
                 }
-                $zip->extractTo($extractionPath);
+                $zip->extractTo($this->extractionPath);
                 $zip->close();
-                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: ZIP original extraído a {$extractionPath}");
+                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: ZIP original extraído a {$this->extractionPath}");
 
-                $worldSourcePath = $this->findWorldDirectory($extractionPath);
+                $worldSourcePath = $this->findWorldDirectory($this->extractionPath);
                 if (!$worldSourcePath) {
-                    throw new Exception("No se pudo encontrar el directorio del mundo (con level.dat) dentro de la extracción en: {$extractionPath}");
+                    throw new Exception("No se pudo encontrar el directorio del mundo (con level.dat)."); // en: {$this->extractionPath}
                 }
                 Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Directorio del mundo encontrado en {$worldSourcePath}");
 
@@ -138,14 +161,13 @@ class ProcesarMundoServidorJob implements ShouldQueue
                     'php', // O la ruta completa de PHP CLI si es necesario
                     base_path('thanos/thanos.php'), // Ruta al script CLI de Thanos
                     $worldSourcePath,
-                    $optimizedWorldPath
+                    $this->optimizedWorldPath
                 ];
 
                 Log::info("Job ID: {$this->job->getJobId()} - Ejecutando comando Thanos: " . implode(' ', $thanosCommand));
 
                 $process = new Process($thanosCommand);
                 $process->setTimeout(null); // Permitir que el proceso de Thanos se ejecute sin el timeout de Symfony Process, el timeout del job de Laravel lo controlará.
-                                         // O establece un timeout específico para el proceso de Thanos: $process->setTimeout(1100); (un poco menos que el timeout del job)
                 $process->setWorkingDirectory(base_path()); // Ejecutar desde la raíz del proyecto
 
                 $process->run(); // Ejecución síncrona
@@ -155,10 +177,10 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 }
                 // Nos conformaremos con el log de éxito o la ausencia de error porque no hay respuesta de chunks.
                 $removedChunks = "N/A (ejecutado como proceso externo)"; // O intenta parsear la salida si es necesario
-                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Thanos optimizó el mundo, removió {$removedChunks} chunks. Salida en {$optimizedWorldPath}");
+                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Thanos optimizó el mundo, removió {$removedChunks} chunks. Salida en {$this->optimizedWorldPath}");
 
-                if (!File::exists($optimizedWorldPath) || count(File::allFiles($optimizedWorldPath)) === 0) {
-                    throw new Exception("La optimización con Thanos no produjo un mundo de salida o el directorio de salida está vacío en {$optimizedWorldPath}.");
+                if (!File::exists($this->optimizedWorldPath) || count(File::allFiles($this->optimizedWorldPath)) === 0) {
+                    throw new Exception("La optimización con Thanos no produjo un mundo de salida o el directorio de salida está vacío en {$this->optimizedWorldPath}.");
                 }
 
                 Storage::disk('public')->makeDirectory($finalOptimizedZipDir);
@@ -169,13 +191,13 @@ class ProcesarMundoServidorJob implements ShouldQueue
                     throw new Exception("No se pudo crear el archivo ZIP de salida optimizado en: {$fullPathFinalOptimizedZip}");
                 }
                 $filesToZip = new \RecursiveIteratorIterator(
-                    new \RecursiveDirectoryIterator($optimizedWorldPath, \RecursiveDirectoryIterator::SKIP_DOTS),
+                    new \RecursiveDirectoryIterator($this->optimizedWorldPath, \RecursiveDirectoryIterator::SKIP_DOTS),
                     \RecursiveIteratorIterator::LEAVES_ONLY
                 );
                 foreach ($filesToZip as $name => $file) {
                     if (!$file->isDir()) {
                         $filePath = $file->getRealPath();
-                        $relativePath = substr($filePath, strlen($optimizedWorldPath) + 1);
+                        $relativePath = substr($filePath, strlen($this->optimizedWorldPath) + 1);
                         $zipOutput->addFile($filePath, $relativePath);
                     }
                 }
@@ -188,18 +210,26 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 $this->servidor->save();
                 Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id} actualizado. Nueva ruta: {$finalOptimizedZipPublicPath}, Estado: listo.");
 
-                Storage::disk('public')->delete($originalZipPublicPath);
-                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: ZIP original {$originalZipPublicPath} eliminado.");
+                // Eliminar el ZIP original de 'mundos_pendientes' solo después de un procesamiento exitoso
+                if ($this->originalZipPublicPath && Storage::disk('public')->exists($this->originalZipPublicPath)) {
+                    Storage::disk('public')->delete($this->originalZipPublicPath);
+                    Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: ZIP original {$this->originalZipPublicPath} eliminado de 'mundos_pendientes' tras éxito.");
+                }
 
             } catch (Exception $processingException) {
                 Log::error("Job ID: {$this->job->getJobId()} - Error durante el procesamiento del Servidor ID {$this->servidor->id}: " . $processingException->getMessage());
                 $this->servidor->estado = 'error_procesamiento';
+                $this->servidor->ruta = null;
                 $this->servidor->save();
+                $this->cleanupOriginalZip();
                 throw $processingException;
             } finally {
-                if (File::exists($extractionPath)) File::deleteDirectory($extractionPath);
-                if (File::exists($optimizedWorldPath)) File::deleteDirectory($optimizedWorldPath);
-                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Limpieza de directorios temporales completada.");
+                $jobIdForFinallyLog = $this->job ? $this->job->getJobId() : 'N/A_JOB_ID';
+                $servidorIdForFinallyLog = $this->servidor ? $this->servidor->id : 'N/A_SERVIDOR_ID';
+                
+                if ($this->extractionPath && File::exists($this->extractionPath)) File::deleteDirectory($this->extractionPath);
+                if ($this->optimizedWorldPath && File::exists($this->optimizedWorldPath)) File::deleteDirectory($this->optimizedWorldPath);
+                Log::info("Job ID: {$jobIdForFinallyLog} - Servidor ID {$servidorIdForFinallyLog}: Limpieza de directorios temporales (desde finally) completada.");
             }
 
         } catch (Exception $e) {
@@ -209,7 +239,9 @@ class ProcesarMundoServidorJob implements ShouldQueue
             
             if ($this->servidor && $this->servidor->estado !== 'error_procesamiento') {
                 $this->servidor->estado = 'error_procesamiento_no_encontrado';
+                $this->servidor->ruta = null;
                 $this->servidor->save();
+                $this->cleanupOriginalZip();
             }
             throw $e;
         }
@@ -223,16 +255,39 @@ class ProcesarMundoServidorJob implements ShouldQueue
      */
     public function failed(Throwable $exception): void
     {
-        Log::error("Job ID: {$this->job->getJobId()} HA FALLADO. Excepción: " . $exception->getMessage());
+        $jobId = $this->job ? $this->job->getJobId() : 'N/A_JOB_ID_IN_FAILED';
+        $servidorId = $this->servidor ? $this->servidor->id : 'N/A_SERVIDOR_ID_IN_FAILED';
+
+        Log::error("Job ID: {$jobId} HA FALLADO para Servidor ID: {$servidorId}. Excepción: " . $exception->getMessage());
 
         // Si el servidor fue asignado y aún está en estado 'procesando',
         // actualízalo a un estado de error para que no bloquee la cola.
         if ($this->servidor && $this->servidor->estado === 'procesando') {
             $this->servidor->estado = 'error_job_timeout_or_failed'; // O un estado más específico
-            // Podrías querer guardar el mensaje de la excepción si tienes un campo para ello
-            // $this->servidor->error_message = $exception->getMessage();
+            $this->servidor->ruta = null; // Asegurarse que la ruta no apunte a un archivo procesado inexistente
             $this->servidor->save();
-            Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id} marcado como 'error_job_timeout_or_failed' debido a fallo del job.");
+            Log::info("Job ID: {$jobId} - Servidor ID {$this->servidor->id} marcado como 'error_job_timeout_or_failed' debido a fallo del job.");
+        }
+
+        // Limpieza de archivos y directorios temporales y el ZIP original
+        $this->cleanupOriginalZip();
+
+        try {
+            if ($this->extractionPath && File::exists($this->extractionPath)) {
+                Log::info("Job ID: {$jobId} - Servidor ID: {$servidorId} - Attempting cleanup of extraction path in failed(): {$this->extractionPath}");
+                File::deleteDirectory($this->extractionPath);
+            }
+        } catch (Throwable $e) {
+            Log::error("Job ID: {$jobId} - Servidor ID: {$servidorId} - Error during cleanup of extractionPath in failed(): " . $e->getMessage());
+        }
+
+        try {
+            if ($this->optimizedWorldPath && File::exists($this->optimizedWorldPath)) {
+                Log::info("Job ID: {$jobId} - Servidor ID: {$servidorId} - Attempting cleanup of optimized world path in failed(): {$this->optimizedWorldPath}");
+                File::deleteDirectory($this->optimizedWorldPath);
+            }
+        } catch (Throwable $e) {
+            Log::error("Job ID: {$jobId} - Servidor ID: {$servidorId} - Error during cleanup of optimizedWorldPath in failed(): " . $e->getMessage());
         }
     }
 }
