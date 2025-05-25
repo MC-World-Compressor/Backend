@@ -6,6 +6,9 @@ use Illuminate\Console\Command;
 use App\Models\Servidor;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Notifications\AnonymousNotifiable;
+use App\Notifications\WorldStatusNotification;
 use Exception;
 
 class LimpiarServidoresExpirados extends Command
@@ -66,6 +69,8 @@ class LimpiarServidoresExpirados extends Command
 
                 $this->info("-> Servidor ID: {$servidor->id} actualizado a estado 'expirado' y ruta vaciada.");
                 Log::info("Servidor ID {$servidor->id} marcado como expirado.");
+                $message = "El mundo '{$servidor->id}' se ha expirado.";
+                Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($servidor->id, 'expirado', $message));
 
             } catch (Exception $e) {
                 $this->error("-> Error al procesar servidor ID: {$servidor->id}. Mensaje: " . $e->getMessage());
@@ -74,6 +79,8 @@ class LimpiarServidoresExpirados extends Command
                     'ruta_archivo' => $servidor->ruta,
                     'exception' => $e
                 ]);
+                $message = "El mundo '{$servidor->id}' ha tiene un error al expirarse: ".$e->getMessage();
+                Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($servidor->id, 'error', $message));
             }
             $this->line('');
         }

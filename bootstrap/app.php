@@ -19,5 +19,5 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withSchedule(function (Schedule $schedule) {
-        $schedule->command(LimpiarServidoresExpirados::class)->hourly();
+        $schedule->command(LimpiarServidoresExpirados::class)->hourly(); //->everyMinute() o ->hourly()
     })->create();

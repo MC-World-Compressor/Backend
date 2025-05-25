@@ -9,6 +9,10 @@ use Exception;
 use App\Jobs\ProcesarMundoServidorJob;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Notifications\AnonymousNotifiable;
+use App\Notifications\WorldStatusNotification;
+
 
 class ServidorController extends Controller
 {
@@ -48,6 +52,9 @@ class ServidorController extends Controller
                 'fecha_expiracion' => now()->addDay(),
             ]);
 
+            $message = "El mundo '{$servidor->id}' ha sido subido y está en cola para ser procesado.";
+            Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($servidor->id, 'subido', $message));
+
             ProcesarMundoServidorJob::dispatch();
 
             return response()->json([
@@ -85,7 +92,7 @@ class ServidorController extends Controller
         else if($servidor->estado == 'expirado' || $servidor->estado == 'pendiente')
             return response()->json([
                 'estado' => $servidor->estado,]);
-        else //return error
+        else
             return response()->json(['error' => 'Error al procesar el servidor'], 404);
     }
 

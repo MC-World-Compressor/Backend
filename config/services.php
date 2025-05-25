@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'discord' => [
+        'notifications_webhook' => env('DISCORD_NOTIFICACIONES_WEBHOOK'),
+    ],
+
 ];

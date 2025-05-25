@@ -15,6 +15,9 @@ use ZipArchive;
 use Illuminate\Support\Facades\DB;
 use Aternos\Thanos\Thanos;
 use Aternos\Thanos\World\AnvilWorld;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Notifications\AnonymousNotifiable;
+use App\Notifications\WorldStatusNotification;
 use Exception;
 use Symfony\Component\Process\Process;
 use Throwable;
@@ -119,6 +122,8 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 Log::info("No hay servidores en estado 'pendiente' para procesar en este momento (Job ID: {$this->job->getJobId()}).");
                 return;
             }
+            $message = "El mundo '{$this->servidor->id}' esta siendo procesado.";
+            Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($this->servidor->id, 'procesando', $message));
 
             $this->originalZipPublicPath = $this->servidor->ruta; // Ej: 'mundos_pendientes/world_xyz.zip'
             // Loguear después de asignar originalZipPublicPath para asegurar que se usa el valor correcto en el log
@@ -210,6 +215,9 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 $this->servidor->save();
                 Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id} actualizado. Nueva ruta: {$finalOptimizedZipPublicPath}, Estado: listo.");
 
+                $message = "El mundo '{$this->servidor->id}' ha sido procesado.";
+                Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($this->servidor->id, 'listo', $message));
+
                 // Eliminar el ZIP original de 'mundos_pendientes' solo después de un procesamiento exitoso
                 if ($this->originalZipPublicPath && Storage::disk('public')->exists($this->originalZipPublicPath)) {
                     Storage::disk('public')->delete($this->originalZipPublicPath);
@@ -218,6 +226,9 @@ class ProcesarMundoServidorJob implements ShouldQueue
 
             } catch (Exception $processingException) {
                 Log::error("Job ID: {$this->job->getJobId()} - Error durante el procesamiento del Servidor ID {$this->servidor->id}: " . $processingException->getMessage());
+                $message = "El mundo '{$this->servidor->id}' ha tenido un error: ".$processingException->getMessage();
+                Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($this->servidor->id, 'error', $message));
+
                 $this->servidor->estado = 'error_procesamiento';
                 $this->servidor->ruta = null;
                 $this->servidor->save();
