@@ -81,19 +81,35 @@ class ServidorController extends Controller
             return response()->json(['error' => 'Servidor no encontrado'], 404);
         }
 
-        if($servidor->estado == 'listo')
-            return response()->json([
-                'estado' => $servidor->estado,
-                //'ruta' => $servidor->ruta,
-                'download_url' => Storage::disk('public')->url($servidor->ruta),
-                'fecha_expiracion' => $servidor->fecha_expiracion,
-                'fecha_creacion' => $servidor->fecha_creacion,
-            ]);
-        else if($servidor->estado == 'expirado' || $servidor->estado == 'pendiente')
-            return response()->json([
-                'estado' => $servidor->estado,]);
-        else
-            return response()->json(['error' => 'Error al procesar el servidor'], 404);
+        $responseData = [
+            'estado' => $servidor->estado,
+        ];
+
+        if ($servidor->estado == 'listo') {
+            $responseData['download_url'] = Storage::disk('public')->url($servidor->ruta);
+            $responseData['fecha_expiracion'] = $servidor->fecha_expiracion;
+            $responseData['fecha_creacion'] = $servidor->fecha_creacion;
+        } elseif ($servidor->estado == 'pendiente') {
+            $servidoresPendientes = Servidor::where('estado', 'pendiente')
+                                          ->orderBy('fecha_creacion', 'asc')
+                                          ->get();
+            $totalEnCola = $servidoresPendientes->count();
+            $posicionEnCola = 0;
+
+            foreach ($servidoresPendientes as $index => $s) {
+                if ($s->id == $servidor->id) {
+                    $posicionEnCola = $index + 1;
+                    break;
+                }
+            }
+            $responseData['cola'] = "{$posicionEnCola}/{$totalEnCola}";
+        } else if ($servidor->estado == 'expirado' || $servidor->estado == 'procesando') {
+            // No se añade información adicional para 'expirado' según el request original
+        } else {
+            $responseData['error'] = 'El estado del servidor no permite mostrar esta información o es un estado de error.';
+        }
+
+        return response()->json($responseData);
     }
 
 }
