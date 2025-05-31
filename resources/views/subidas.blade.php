@@ -13,7 +13,7 @@
         <h2>Sube o arrastra tu archivo ZIP</h2>
 
         {{-- Usar url() helper para generar la URL es más flexible --}}
-        <form id="uploadForm" method="POST" action="https://8000--main--mccompressor--markos--ki1jluq18oa3g.pit-1.try.coder.app/api/subir" enctype="multipart/form-data">
+        <form id="uploadForm" method="POST" action="{{ env('APP_URL') }}/api/subir" enctype="multipart/form-data">
             @csrf
             <div id="dropZone" class="drop-zone">
                 <p>Arrastra aquí un archivo ZIP o haz clic para seleccionar</p>

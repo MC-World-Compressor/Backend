@@ -46,10 +46,15 @@ class ServidorController extends Controller
                 throw new Exception("No se pudo guardar el archivo del mundo en el servidor.");
             }
 
+            $tamanoEnBytes = $uploadedFile->getSize();
+            $tamanoInicioEnMB = $tamanoEnBytes / (1024 * 1024);
+
             $servidor = Servidor::create([
                 'ruta' => $storedPath,
                 'estado' => 'pendiente',
                 'fecha_expiracion' => now()->addDay(),
+                'tamano_inicio' => $tamanoInicioEnMB,
+                'ip' => $request->ip(),
             ]);
 
             $message = "El mundo '{$servidor->id}' ha sido subido y está en cola para ser procesado.";
@@ -89,6 +94,8 @@ class ServidorController extends Controller
             $responseData['download_url'] = Storage::disk('public')->url($servidor->ruta);
             $responseData['fecha_expiracion'] = $servidor->fecha_expiracion;
             $responseData['fecha_creacion'] = $servidor->fecha_creacion;
+            $responseData['tamano_inicio'] = $servidor->tamano_inicio;
+            $responseData['tamano_final'] = $servidor->tamano_final;
         } elseif ($servidor->estado == 'pendiente') {
             $servidoresPendientes = Servidor::where('estado', 'pendiente')
                                           ->orderBy('fecha_creacion', 'asc')
@@ -104,9 +111,12 @@ class ServidorController extends Controller
             }
             $responseData['cola'] = "{$posicionEnCola}/{$totalEnCola}";
         } else if ($servidor->estado == 'expirado' || $servidor->estado == 'procesando') {
-            // No se añade información adicional para 'expirado' según el request original
+            $responseData['fecha_expiracion'] = $servidor->fecha_expiracion;
+            $responseData['fecha_creacion'] = $servidor->fecha_creacion;
+            $responseData['tamano_inicio'] = $servidor->tamano_inicio;
+            $responseData['tamano_final'] = $servidor->tamano_final;
         } else {
-            $responseData['error'] = 'El estado del servidor no permite mostrar esta información o es un estado de error.';
+            $responseData['error'] = 'El servidor no ha podido procesarse o esta en un estado desconocido.';
         }
 
         return response()->json($responseData);

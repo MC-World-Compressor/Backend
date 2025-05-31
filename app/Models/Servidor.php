@@ -39,6 +39,9 @@ class Servidor extends Model
         'ruta',
         'estado',
         'fecha_expiracion',
+        'tamano_inicio',
+        'tamano_final',
+        'ip'
     ];
 
     /**

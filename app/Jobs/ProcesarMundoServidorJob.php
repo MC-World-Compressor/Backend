@@ -136,7 +136,7 @@ class ProcesarMundoServidorJob implements ShouldQueue
             $this->optimizedWorldPath = storage_path('app/temp_job_optimized/' . $this->servidor->id . '_' . $uniqueId);
             
             $finalOptimizedZipDir = 'mundos_procesados';
-            $finalOptimizedZipName = Str::slug($originalFileNameWithoutExt) . '_comprimido.zip';
+            $finalOptimizedZipName = Str::slug($originalFileNameWithoutExt) . '_compressed.zip';
             $finalOptimizedZipPublicPath = $finalOptimizedZipDir . '/' . $finalOptimizedZipName;
 
             try {
@@ -191,6 +191,24 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 Storage::disk('public')->makeDirectory($finalOptimizedZipDir);
                 $fullPathFinalOptimizedZip = Storage::disk('public')->path($finalOptimizedZipPublicPath);
 
+                if ($worldSourcePath === $this->extractionPath) {
+                    $baseName = $originalFileNameWithoutExt;
+
+                    if (Str::contains($baseName, '_')) {
+                        $potentialFolderName = Str::beforeLast($baseName, '_');
+                        if ($potentialFolderName !== '') {
+                            $outputZipRootFolderName = $potentialFolderName;
+                        } else {
+                            $outputZipRootFolderName = $baseName;
+                        }
+                    } else {
+                        $outputZipRootFolderName = $baseName;
+                    }
+                } else {
+                    $outputZipRootFolderName = basename($worldSourcePath);
+                }
+                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Nombre de la carpeta raíz para el ZIP de salida determinado: '{$outputZipRootFolderName}'");
+
                 $zipOutput = new ZipArchive();
                 if ($zipOutput->open($fullPathFinalOptimizedZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) {
                     throw new Exception("No se pudo crear el archivo ZIP de salida optimizado en: {$fullPathFinalOptimizedZip}");
@@ -202,18 +220,22 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 foreach ($filesToZip as $name => $file) {
                     if (!$file->isDir()) {
                         $filePath = $file->getRealPath();
-                        $relativePath = substr($filePath, strlen($this->optimizedWorldPath) + 1);
-                        $zipOutput->addFile($filePath, $relativePath);
+                        $relativePathInOptimizedDir = substr($filePath, strlen($this->optimizedWorldPath) + 1);
+                        $pathInZip = $outputZipRootFolderName . DIRECTORY_SEPARATOR . $relativePathInOptimizedDir;
+                        $zipOutput->addFile($filePath, $pathInZip);
                     }
                 }
                 $zipOutput->close();
-                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Mundo optimizado comprimido en {$finalOptimizedZipPublicPath}");
+                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Mundo optimizado comprimido en {$finalOptimizedZipPublicPath} con estructura interna bajo '{$outputZipRootFolderName}'.");
+                $tamanoFinalEnBytes = Storage::disk('public')->size($finalOptimizedZipPublicPath);
+                $tamanoFinalEnMB = $tamanoFinalEnBytes / (1024 * 1024);
 
                 $this->servidor->ruta = $finalOptimizedZipPublicPath;
                 $this->servidor->estado = 'listo';
                 $this->servidor->fecha_expiracion = now()->addHours(1);
+                $this->servidor->tamano_final = $tamanoFinalEnMB;
                 $this->servidor->save();
-                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id} actualizado. Nueva ruta: {$finalOptimizedZipPublicPath}, Estado: listo.");
+                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id} actualizado. Nueva ruta: {$finalOptimizedZipPublicPath}, Estado: listo, Tamaño final: {$tamanoFinalEnMB} MB.");
 
                 $message = "El mundo '{$this->servidor->id}' ha sido procesado.";
                 Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($this->servidor->id, 'listo', $message));

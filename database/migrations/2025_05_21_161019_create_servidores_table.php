@@ -15,8 +15,11 @@ return new class extends Migration
             $table->id();
             $table->string('ruta')->nullable();
             $table->string('estado')->default('pendiente');
+            $table->decimal('tamano_inicio', 8, 2)->nullable();
+            $table->decimal('tamano_final', 8, 2)->nullable();
             $table->timestamp('fecha_expiracion')->nullable();
             $table->timestamp('fecha_creacion')->useCurrent();
+            $table->string('ip')->nullable();
         });
     }
 
