@@ -17,7 +17,7 @@
             @csrf
             <div id="dropZone" class="drop-zone">
                 <p>Arrastra aquí un archivo ZIP o haz clic para seleccionar</p>
-                <input type="file" name="mundo_comprimido" id="mundo_comprimido" accept=".zip" hidden />
+                <input type="file" name="mundo_comprimido" id="mundo_comprimido" accept=".zip,.tar,.tar.gz,.gz" hidden />
             </div>
             <button type="submit">Comprimir Mundo</button>
         </form>

@@ -13,6 +13,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\File;
 use ZipArchive;
 use Illuminate\Support\Facades\DB;
+use PharData;
 use Aternos\Thanos\Thanos;
 use Aternos\Thanos\World\AnvilWorld;
 use Illuminate\Support\Facades\Notification;
@@ -82,15 +83,14 @@ class ProcesarMundoServidorJob implements ShouldQueue
         if ($this->originalZipPublicPath && Storage::disk('public')->exists($this->originalZipPublicPath)) {
             try {
                 Storage::disk('public')->delete($this->originalZipPublicPath);
-                Log::info("Job ID: {$jobId} - Servidor ID {$servidorId}: ZIP original {$this->originalZipPublicPath} eliminado de 'mundos_pendientes' debido a error.");
+                Log::info("Job ID: {$jobId} - Servidor ID {$servidorId}: Archivo original {$this->originalZipPublicPath} eliminado de 'mundos_pendientes' debido a error.");
             } catch (Throwable $e) {
-                Log::error("Job ID: {$jobId} - Servidor ID {$servidorId}: Error al intentar eliminar el ZIP original {$this->originalZipPublicPath} de 'mundos_pendientes': " . $e->getMessage());
+                Log::error("Job ID: {$jobId} - Servidor ID {$servidorId}: Error al intentar eliminar el archivo original {$this->originalZipPublicPath} de 'mundos_pendientes': " . $e->getMessage());
             }
         } else if ($this->originalZipPublicPath) {
-            Log::info("Job ID: {$jobId} - Servidor ID {$servidorId}: ZIP original {$this->originalZipPublicPath} no encontrado en 'mundos_pendientes' para eliminar (posiblemente ya procesado/eliminado o nunca existió allí con este nombre).");
+            Log::info("Job ID: {$jobId} - Servidor ID {$servidorId}: Archivo original {$this->originalZipPublicPath} no encontrado en 'mundos_pendientes' para eliminar (posiblemente ya procesado/eliminado o nunca existió allí con este nombre).");
         }
     }
-
     /**
      * Execute the job.
      *
@@ -125,9 +125,8 @@ class ProcesarMundoServidorJob implements ShouldQueue
             $message = "El mundo '{$this->servidor->id}' esta siendo procesado.";
             Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($this->servidor->id, 'procesando', $message));
 
-            $this->originalZipPublicPath = $this->servidor->ruta; // Ej: 'mundos_pendientes/world_xyz.zip'
-            // Loguear después de asignar originalZipPublicPath para asegurar que se usa el valor correcto en el log
-            Log::info("Job ID: {$this->job->getJobId()} - Iniciando procesamiento para servidor ID: {$this->servidor->id}, ruta original ZIP: {$this->originalZipPublicPath}");
+            $this->originalZipPublicPath = $this->servidor->ruta; // Ej: 'mundos_pendientes/world_xyz.zip' o 'mundos_pendientes/world_xyz.tar.gz'
+            Log::info("Job ID: {$this->job->getJobId()} - Iniciando procesamiento para servidor ID: {$this->servidor->id}, ruta original archivo: {$this->originalZipPublicPath}");
 
             $originalZipBaseName = basename($this->originalZipPublicPath);
             $originalFileNameWithoutExt = pathinfo($originalZipBaseName, PATHINFO_FILENAME);
@@ -141,21 +140,42 @@ class ProcesarMundoServidorJob implements ShouldQueue
 
             try {
                 if (!Storage::disk('public')->exists($this->originalZipPublicPath)) {
-                    throw new Exception("El archivo ZIP original '{$this->originalZipPublicPath}' no se encontró en el disco público.");
+                    throw new Exception("El archivo original '{$this->originalZipPublicPath}' no se encontró en el disco público.");
                 }
                 $fullPathOriginalZip = Storage::disk('public')->path($this->originalZipPublicPath);
 
                 File::makeDirectory($this->extractionPath, 0755, true, true);
                 File::makeDirectory($this->optimizedWorldPath, 0755, true, true);
 
-                $zip = new ZipArchive;
-                if ($zip->open($fullPathOriginalZip) !== TRUE) {
-                    throw new Exception("No se pudo abrir el archivo ZIP original: {$fullPathOriginalZip}");
-                }
-                $zip->extractTo($this->extractionPath);
-                $zip->close();
-                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: ZIP original extraído a {$this->extractionPath}");
+                $fileExtension = '';
+                $currentPathForExtDetection = $this->originalZipPublicPath;
+                $lowerPathForExtDetection = strtolower($currentPathForExtDetection);
 
+                if (Str::endsWith($lowerPathForExtDetection, '.tar.gz')) {
+                    $fileExtension = 'tar.gz';
+                } elseif (Str::endsWith($lowerPathForExtDetection, '.tar')) {
+                    $fileExtension = 'tar';
+                } elseif (Str::endsWith($lowerPathForExtDetection, '.zip')) {
+                    $fileExtension = 'zip';
+                } else {
+                    Log::error("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Path '{$lowerPathForExtDetection}' no tiene ningun sufijo de extension de archivo soportado.");
+                    throw new Exception("Tipo de archivo no soportado para el archivo: {$currentPathForExtDetection}");
+                }
+                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Extrayendo archivo {$fullPathOriginalZip} (tipo: {$fileExtension}) a {$this->extractionPath}");
+                if ($fileExtension === 'zip') {
+                    $zip = new ZipArchive;
+                    if ($zip->open($fullPathOriginalZip) !== TRUE) {
+                        throw new Exception("No se pudo abrir el archivo ZIP: {$fullPathOriginalZip}");
+                    }
+                    $zip->extractTo($this->extractionPath);
+                    $zip->close();
+                } elseif ($fileExtension === 'tar' || $fileExtension === 'tar.gz') {
+                    $phar = new PharData($fullPathOriginalZip);
+                    $phar->extractTo($this->extractionPath, null, true);
+                } else {
+                    throw new Exception("Extracción no implementada para el tipo de archivo: {$fileExtension}");
+                }
+                Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Archivo original extraído a {$this->extractionPath}");
                 $worldSourcePath = $this->findWorldDirectory($this->extractionPath);
                 if (!$worldSourcePath) {
                     throw new Exception("No se pudo encontrar el directorio del mundo (con level.dat)."); // en: {$this->extractionPath}
@@ -240,10 +260,10 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 $message = "El mundo '{$this->servidor->id}' ha sido procesado.";
                 Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($this->servidor->id, 'listo', $message));
 
-                // Eliminar el ZIP original de 'mundos_pendientes' solo después de un procesamiento exitoso
+                // Eliminar el archivo original de 'mundos_pendientes' solo después de un procesamiento exitoso
                 if ($this->originalZipPublicPath && Storage::disk('public')->exists($this->originalZipPublicPath)) {
                     Storage::disk('public')->delete($this->originalZipPublicPath);
-                    Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: ZIP original {$this->originalZipPublicPath} eliminado de 'mundos_pendientes' tras éxito.");
+                    Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Archivo original {$this->originalZipPublicPath} eliminado de 'mundos_pendientes' tras éxito.");
                 }
 
             } catch (Exception $processingException) {
@@ -302,7 +322,7 @@ class ProcesarMundoServidorJob implements ShouldQueue
             Log::info("Job ID: {$jobId} - Servidor ID {$this->servidor->id} marcado como 'error_job_timeout_or_failed' debido a fallo del job.");
         }
 
-        // Limpieza de archivos y directorios temporales y el ZIP original
+        // Limpieza de archivos y directorios temporales y el archivo original
         $this->cleanupOriginalZip();
 
         try {

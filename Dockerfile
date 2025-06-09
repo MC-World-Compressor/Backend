@@ -34,12 +34,12 @@ RUN php artisan storage:link
 
 RUN npm install
 
-# Configurar límite de subida a 4GB
+# Configurar límites de subida y timeouts de PHP
 RUN echo "upload_max_filesize = 4096M" >> /usr/local/etc/php/conf.d/uploads.ini \
     && echo "post_max_size = 4096M" >> /usr/local/etc/php/conf.d/uploads.ini \
     && echo "max_input_time = 600" >> /usr/local/etc/php/conf.d/uploads.ini \
     && echo "max_execution_time = 600" >> /usr/local/etc/php/conf.d/uploads.ini \
-    && echo "memory_limit = 4096M" >> /usr/local/etc/php/conf.d/uploads.ini
+    && echo "memory_limit = 8192M" >> /usr/local/etc/php/conf.d/uploads.ini
 
 EXPOSE 8000
 

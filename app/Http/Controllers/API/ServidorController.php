@@ -23,7 +23,7 @@ class ServidorController extends Controller
 
     public function subirMundo(Request $request){
         $request->validate([
-            'mundo_comprimido' => 'required|file|mimes:zip|max:2097152', // Max 2048MB
+            'mundo_comprimido' => 'required|file|mimes:zip,tar,gz|max:4194304', // Max 4096MB
         ]);
 
         try {
@@ -34,10 +34,22 @@ class ServidorController extends Controller
                 throw new Exception("Error en la subida del archivo ZIP: Código " . $uploadedFile->getError());
             }
 
-            $originalFileName = pathinfo($uploadedFile->getClientOriginalName(), PATHINFO_FILENAME);
-            $uniqueId = Str::random(10);
-            $fileNameToStore = Str::slug($originalFileName) . '_' . $uniqueId . '.zip';
+            $originalClientName = $uploadedFile->getClientOriginalName();
+            $fileInfo = pathinfo($originalClientName);
+            $baseNameWithoutAnyExt = $fileInfo['filename'];
+            $extension = $fileInfo['extension'];
 
+            $fullExtension = strtolower($extension);
+            if ($fullExtension === 'gz' && Str::endsWith(strtolower($baseNameWithoutAnyExt), '.tar')) {
+                $fullExtension = 'tar.gz';
+                $baseNameWithoutAnyExt = Str::beforeLast($baseNameWithoutAnyExt, '.tar');
+            } elseif ($fullExtension === 'bz2' && Str::endsWith(strtolower($baseNameWithoutAnyExt), '.tar')) {
+                $fullExtension = 'tar.bz2';
+                $baseNameWithoutAnyExt = Str::beforeLast($baseNameWithoutAnyExt, '.tar');
+            }
+
+            $uniqueId = Str::random(10);
+            $fileNameToStore = Str::slug($baseNameWithoutAnyExt) . '_' . $uniqueId . '.' . $fullExtension;
             Storage::disk('public')->makeDirectory('mundos_pendientes');
 
             $storedPath = $uploadedFile->storeAs('mundos_pendientes', $fileNameToStore, 'public');
