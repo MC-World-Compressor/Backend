@@ -1,61 +1,110 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# MCWCompressor Backend
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A project developed in Laravel 12 that uses the [thanos](https://github.com/aternosorg/thanos) library to efficiently compress Minecraft worlds.
 
-## About Laravel
+> [!NOTE]
+> The Spanish version of this README can be found in [README-ES.md](/README-ES.md).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Table of Contents
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- [Description](#description)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Contributions](#contributions)
+- [License](#license)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Description
 
-## Learning Laravel
+MCWCompressor aims to provide an easy-to-use tool to reduce the file size of Minecraft worlds. This is especially useful for backups, transferring worlds, or simply saving disk space. Compression is performed using the powerful [thanos](https://github.com/aternosorg/thanos) library.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Requirements
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+Make sure you have the following software installed on your system:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- PHP >= 8.2
+- Composer
+- Node.js >= 18
+- The Minecraft world compression library Thanos in the `thanos` folder at the root of the project.
 
-## Laravel Sponsors
+## Installation
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Follow these steps to get the project up and running:
 
-### Premium Partners
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/MC-World-Compressor/Backend.git
+    cd Backend
+    ```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+2.  **Intall dependencies:**
+    ```bash
+    npm install && composer install
+    ```
 
-## Contributing
+3.  **Clone of compressor library:**
+    ```bash
+    git clone https://github.com/aternosorg/thanos.git
+    ```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+4.  **Set up the environment:**
+    Copy the example file `.env.example` to `.env`:
+    ```bash
+    cp .env.example .env
+    ```
+    Open the `.env` file and configure your environment variables, especially:
+    - `APP_KEY` (will be generated in the next step)
+    - `DB_CONNECTION` and the database credentials (if you use a DB other than SQLite).
+    - Any other project-specific settings.
 
-## Code of Conduct
+5.  **Generate the application key:**
+    ```bash
+    php artisan key:generate
+    ```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+6.  **Run migrations:**
+    ```bash
+    php artisan migrate
+    ```
 
-## Security Vulnerabilities
+9.  **Create the symbolic link between storage and public:**
+    ```bash
+    php artisan storage:link
+    ```
+    Make sure the `storage` and `public` directories have write permissions.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+10. **Start the server:**
+    ```bash
+    npm start
+    ```
+   Then, access the backend using: `http://localhost:8000`.
+
+## Contributions
+
+Contributions are welcome! If you'd like to improve this project:
+1. Fork the repository.
+2. Create a new branch (`git checkout -b feature/new-feature`).
+3. Make your changes and commit (`git commit -m 'Add new feature'`).
+4. Push your changes to the branch (`git push origin feature/new-feature`).
+5. Open a pull request.
+
+Please ensure your code follows the project standards and include tests if applicable.
 
 ## License
+[![Static Badssge](https://img.shields.io/badge/CC_BY--NC--SA_4.0-blue?style=for-the-badge&color=gray)](/LICENSE)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+`Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International`
+
+### What does that mean?
+
+- This project is open source, you can use, mix or reuse any of the code or assets.
+- You cannot use any of the source code or assets material for commercial purposes.
+- You cannot monetize any of the work done on this repository, or all the derivative work.
+- You must link any of the used, mixed or reused material to this repo.
+- You must preserve the `CC BY-NC-SA 4.0` license to all the derivative work.
+
+
+### Exceptions:
+
+You can add donations to maintain your own server, but it can't unlock anything or differentiate the user in any way. Just that, no gray areas!
+
+---
