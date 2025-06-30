@@ -183,7 +183,7 @@ class ProcesarMundoServidorJob implements ShouldQueue
                 Log::info("Job ID: {$this->job->getJobId()} - Servidor ID {$this->servidor->id}: Directorio del mundo encontrado en {$worldSourcePath}");
 
                 $thanosCommand = [
-                    'php', // O la ruta completa de PHP CLI si es necesario
+                    'php',
                     base_path('thanos/thanos.php'), // Ruta al script CLI de Thanos
                     $worldSourcePath,
                     $this->optimizedWorldPath

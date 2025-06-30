@@ -38,8 +38,9 @@ class LimpiarServidoresExpirados extends Command
         $ahora = now();
 
         $servidoresExpirados = Servidor::where('fecha_expiracion', '<=', $ahora)
-                                       ->where('estado', '!=', 'expirado')
-                                       ->get();
+                                        ->where('estado', '!=', 'expirado')
+                                        ->whereNotLike('estado', '%error%')
+                                        ->get();
 
         if ($servidoresExpirados->isEmpty()) {
             $this->info('No hay servidores expirados para limpiar en este momento.');
