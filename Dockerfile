@@ -35,11 +35,16 @@ RUN php artisan storage:link
 RUN npm install
 
 # Configurar límites de subida y timeouts de PHP
-RUN echo "upload_max_filesize = 4096M" >> /usr/local/etc/php/conf.d/uploads.ini \
-    && echo "post_max_size = 4096M" >> /usr/local/etc/php/conf.d/uploads.ini \
-    && echo "max_input_time = 600" >> /usr/local/etc/php/conf.d/uploads.ini \
-    && echo "max_execution_time = 600" >> /usr/local/etc/php/conf.d/uploads.ini \
+RUN echo "upload_max_filesize = 8192M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "post_max_size = 8192M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "max_input_time = 1800" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "max_execution_time = 1800" >> /usr/local/etc/php/conf.d/uploads.ini \
     && echo "memory_limit = 8192M" >> /usr/local/etc/php/conf.d/uploads.ini
+
+# Aumentar el request_terminate_timeout de PHP-FPM
+# Esto asume que la configuración del pool por defecto es www.conf
+RUN echo "\n; Aumentar el timeout para peticiones largas" >> /usr/local/etc/php-fpm.d/www.conf \
+    && echo "request_terminate_timeout = 1800s" >> /usr/local/etc/php-fpm.d/www.conf
 
 EXPOSE 8000
 
