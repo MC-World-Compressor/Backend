@@ -1,151 +1,167 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Subir archivo ZIP</title>
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Subir archivo por chunks</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f4f4f4;
+      padding: 2rem;
+    }
 
-    <!-- Vincular CSS desde public/css/styles.css -->
-    <link href="css/styles.css" rel="stylesheet" />
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    .drop-zone {
+      border: 2px dashed #888;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 1rem;
+    }
+
+    .drop-zone.dragover {
+      background-color: #e0f7fa;
+      border-color: #00bcd4;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #ddd;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #4caf50;
+      width: 0%;
+      transition: width 0.2s ease-in-out;
+    }
+
+    #status {
+      margin-top: 1rem;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+  </style>
 </head>
 <body>
-    <div class="upload-container">
-        <h2>Sube o arrastra tu archivo ZIP</h2>
-
-        {{-- Usar url() helper para generar la URL es más flexible --}}
-        <form id="uploadForm" method="POST" action="{{ env('APP_URL') }}/api/subir" enctype="multipart/form-data">
-            @csrf
-            <div id="dropZone" class="drop-zone">
-                <p>Arrastra aquí un archivo ZIP o haz clic para seleccionar</p>
-                <input type="file" name="mundo_comprimido" id="mundo_comprimido" accept=".zip,.tar,.tar.gz,.gz" hidden />
-            </div>
-            <button type="submit">Comprimir Mundo</button>
-        </form>
-
-        <div id="result"></div>
-        <div id="progress-container" style="display: none;">
-            <div class="progress-bar">
-                <div id="progress-fill" class="progress-fill"></div>
-            </div>
-            <p id="progress-text">0%</p>
-            <p id="chunk-info"></p>
-        </div>
+  <div class="container">
+    <h2>Subir archivo por chunks</h2>
+    <div class="drop-zone" id="dropZone">
+      <p>Haz clic o arrastra tu archivo ZIP/TAR aquí</p>
+      <input type="file" id="fileInput" accept=".zip,.tar,.gz,.tar.gz" />
     </div>
+    <button id="uploadBtn">Subir Archivo</button>
 
-    <script src="js/chunked-upload.js"></script>
-    <script>
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('mundo_comprimido');
-        const form = document.getElementById('uploadForm');
-        const resultDiv = document.getElementById('result');
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div id="status"></div>
+  </div>
 
-        dropZone.addEventListener('click', () => fileInput.click());
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const progressFill = document.getElementById('progressFill');
+    const status = document.getElementById('status');
 
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
+    let selectedFile = null;
 
-        dropZone.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-        });
+    dropZone.addEventListener('click', () => fileInput.click());
 
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            if (e.dataTransfer.files.length) {
-                fileInput.files = e.dataTransfer.files;
-            }
-        });
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
 
-        // Configurar subida por chunks para archivos grandes
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+    dropZone.addEventListener('dragleave', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+    });
 
-            const progressContainer = document.getElementById('progress-container');
-            const progressFill = document.getElementById('progress-fill');
-            const progressText = document.getElementById('progress-text');
-            const chunkInfo = document.getElementById('chunk-info');
-            
-            // Si el archivo es mayor a 100MB, usar subida por chunks
-            if (file.size > 100 * 1024 * 1024) {
-                progressContainer.style.display = 'block';
-                resultDiv.innerHTML = '<p>Iniciando subida por chunks para archivo grande...</p>';
-                
-                const uploader = new ChunkedUpload(file, {
-                    chunkSize: 50 * 1024 * 1024, // 50MB por chunk?
-                    
-                    onProgress: (progressData) => {
-                        const percent = Math.round(progressData.progress);
-                        progressFill.style.width = percent + '%';
-                        progressText.textContent = percent + '%';
-                        chunkInfo.textContent = `Chunk ${progressData.chunksCompleted} de ${progressData.totalChunks}`;
-                    },
-                    
-                    onComplete: (data) => {
-                        progressContainer.style.display = 'none';
-                        resultDiv.innerHTML = `
-                            <p style="color: green;">${data.message}</p>
-                            <p>ID del Servidor: ${data.servidor_id}</p>
-                            <p>Estado: ${data.estado}</p>
-                            <p>Archivo subido exitosamente por chunks.</p>
-                        `;
-                    },
-                    
-                    onError: (error) => {
-                        progressContainer.style.display = 'none';
-                        resultDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
-                    }
-                });
-                
-                uploader.upload();
-            }
-        });
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        selectedFile = e.dataTransfer.files[0];
+        dropZone.querySelector('p').textContent = selectedFile.name;
+      }
+    });
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const file = fileInput.files[0];
-            
-            // Si el archivo es grande, no usar el formulario tradicional
-            if (file && file.size > 100 * 1024 * 1024) {
-                resultDiv.innerHTML = '<p>Use el selector de archivos para subir archivos grandes.</p>';
-                return;
-            }
-            
-            const formData = new FormData(form);
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) {
+        selectedFile = fileInput.files[0];
+        dropZone.querySelector('p').textContent = selectedFile.name;
+      }
+    });
 
-            const response = await fetch(form.action, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'Accept': 'application/json'
-                },
-                body: formData
-            });
+    uploadBtn.addEventListener('click', async () => {
+      if (!selectedFile) {
+        alert('Selecciona un archivo primero.');
+        return;
+      }
 
-            const data = await response.json();
+      const chunkSize = 50 * 1024 * 1024; // 50MB
+      const totalChunks = Math.ceil(selectedFile.size / chunkSize);
+      const uploadId = Date.now().toString() + Math.floor(Math.random() * 1000);
 
-            if (response.ok) {
-                resultDiv.innerHTML = `
-                    <p style="color: green;">${data.message}</p>
-                    <p>ID del Servidor: ${data.servidor_id}</p>
-                    <p>Estado: ${data.estado}</p>
-                `;
-            } else {
-                let errorMessage = data.message || data.error || 'Error al subir el archivo.';
-                if (data.errors) {
-                    errorMessage += '<ul>';
-                    for (const key in data.errors) {
-                        errorMessage += `<li>${data.errors[key].join(', ')}</li>`;
-                    }
-                    errorMessage += '</ul>';
-                }
-                resultDiv.innerHTML = `<p style="color: red;">${errorMessage}</p>`;
-            }
-        });
-    </script>
+      status.textContent = 'Iniciando subida por chunks...';
+      progressFill.style.width = '0%';
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * chunkSize;
+        const end = Math.min(start + chunkSize, selectedFile.size);
+        const chunk = selectedFile.slice(start, end);
+
+        const formData = new FormData();
+        formData.append('mundo_comprimido', chunk);
+        formData.append('fileName', selectedFile.name);
+        formData.append('uploadId', uploadId);
+        formData.append('chunkIndex', chunkIndex);
+        formData.append('totalChunks', totalChunks);
+        formData.append('isLastChunk', chunkIndex === totalChunks - 1 ? 'true' : 'false');
+
+        try {
+          const res = await fetch('/api/subir', {
+            method: 'POST',
+            body: formData
+          });
+
+          const resData = await res.json();
+
+          if (!res.ok) {
+            throw new Error(resData.error || resData.message || 'Error en subida');
+          }
+
+          const percent = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+          progressFill.style.width = percent + '%';
+          status.textContent = `Subido ${chunkIndex + 1} de ${totalChunks} chunks (${percent}%)`;
+
+          if (chunkIndex === totalChunks - 1) {
+            status.textContent = `✅ Archivo completo subido y procesado. ID: ${resData.servidor_id || '-'}`;
+          }
+
+        } catch (err) {
+          status.textContent = `❌ Error en el chunk ${chunkIndex}: ${err.message}`;
+          break;
+        }
+      }
+    });
+  </script>
 </body>
 </html>
