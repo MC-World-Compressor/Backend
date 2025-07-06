@@ -19,158 +19,91 @@ use Illuminate\Http\UploadedFile;
 class ServidorController extends Controller
 {
     public function getCola(){
-        $cantidad = Servidor::where('estado', 'pendiente')->count();
+        $cantidad = Servidor::whereIn('estado', ['pendiente', 'procesando'])->count();
         return response()->json(['cola' => $cantidad]);
     }
 
 
-   public function subirMundo(Request $request)
-{
-    $uploadId = $request->input('uploadId');
-    $fileName = $request->input('fileName');
-    $chunkIndex = $request->input('chunkIndex');
-    $totalChunks = $request->input('totalChunks');
-    $isLastChunk = $request->input('isLastChunk');
-    $uploadedChunk = $request->file('mundo_comprimido');
+    public function subirMundo(Request $request)
+    {
+        $uploadId = $request->input('uploadId');
+        $fileName = $request->input('fileName');
+        $chunkIndex = $request->input('chunkIndex');
+        $totalChunks = $request->input('totalChunks');
+        $isLastChunk = $request->input('isLastChunk');
+        $uploadedChunk = $request->file('mundo_comprimido');
 
-    if ($uploadId && $fileName && $totalChunks !== null && $chunkIndex !== null) {
-        // Modo chunked
-        $tempDir = storage_path("app/chunks/$uploadId");
+        if ($uploadId && $fileName && $totalChunks !== null && $chunkIndex !== null) {
+            // Modo chunk
+            $tempDir = storage_path("app/chunks/$uploadId");
 
-        if (!file_exists($tempDir)) {
-            mkdir($tempDir, 0777, true);
-        }
-
-        $chunkPath = $tempDir . "/chunk_{$chunkIndex}";
-        $uploadedChunk->move($tempDir, "chunk_{$chunkIndex}");
-
-        // Si es el último chunk, ensamblar
-        if ($isLastChunk === 'true' || intval($chunkIndex) == intval($totalChunks) - 1) {
-            $finalPath = storage_path("app/chunks/{$uploadId}_final");
-
-            $finalFile = fopen($finalPath, 'ab');
-
-            for ($i = 0; $i < $totalChunks; $i++) {
-                $chunkFilePath = $tempDir . "/chunk_{$i}";
-                if (!file_exists($chunkFilePath)) {
-                    return response()->json(['error' => "Falta el chunk {$i}"], 400);
-                }
-                fwrite($finalFile, file_get_contents($chunkFilePath));
+            if (!file_exists($tempDir)) {
+                mkdir($tempDir, 0777, true);
             }
 
-            fclose($finalFile);
-
-            // Ahora simula el flujo normal de archivo completo
-            $finalUploadedFile = new \Illuminate\Http\UploadedFile(
-                $finalPath,
-                $fileName,
-                null,
-                null,
-                true
-            );
-
-            $request->files->set('mundo_comprimido', $finalUploadedFile);
-            
-            // Eliminar los chunks temporales
-            File::deleteDirectory($tempDir);
-
-            // Reingresar a flujo normal
-            return $this->procesarArchivoFinal($request, $finalUploadedFile);
-        }
-
-        return response()->json(['message' => "Chunk {$chunkIndex} recibido"], 200);
-    }
-
-    // Modo normal (archivo completo)
-    $uploadedFile = $request->file('mundo_comprimido');
-    return $this->procesarArchivoFinal($request, $uploadedFile);
-}
-
-
-private function procesarArchivoFinal(Request $request, UploadedFile $uploadedFile)
-{
-    try {
-        $storedPath = null;
-
-        if (!$uploadedFile->isValid()) {
-            throw new Exception("Error en la subida del archivo: Código " . $uploadedFile->getError());
-        }
-
-        $originalClientName = $uploadedFile->getClientOriginalName();
-        $fileInfo = pathinfo($originalClientName);
-        $baseNameWithoutAnyExt = $fileInfo['filename'];
-        $extension = $fileInfo['extension'];
-
-        // Comprobar .tar.gz
-        $fullExtension = strtolower($extension);
-        if ($fullExtension === 'gz' && Str::endsWith(strtolower($baseNameWithoutAnyExt), '.tar')) {
-            $fullExtension = 'tar.gz';
-            $baseNameWithoutAnyExt = Str::beforeLast($baseNameWithoutAnyExt, '.tar');
-        }
-
-        $uniqueId = Str::random(10);
-        $fileNameToStore = Str::slug($baseNameWithoutAnyExt) . '_' . $uniqueId . '.' . $fullExtension;
-        Storage::disk('public')->makeDirectory('mundos_pendientes');
-        $storedPath = $uploadedFile->storeAs('mundos_pendientes', $fileNameToStore, 'public');
-
-        if (!$storedPath) {
-            throw new Exception("No se pudo guardar el archivo del mundo en el servidor.");
-        }
-
-        $tamanoEnBytes = $uploadedFile->getSize();
-        $tamanoInicioEnMB = $tamanoEnBytes / (1024 * 1024);
-
-        $servidor = Servidor::create([
-            'ruta' => $storedPath,
-            'estado' => 'pendiente',
-            'fecha_expiracion' => now()->addDay(),
-            'tamano_inicio' => $tamanoInicioEnMB,
-            'ip' => $request->ip(),
-        ]);
-
-        Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($servidor->id, 'subido', "Archivo subido por chunks"));
-
-        ProcesarMundoServidorJob::dispatch();
-
-        return response()->json([
-            'message' => 'Archivo subido y procesado.',
-            'servidor_id' => $servidor->id,
-            'estado' => $servidor->estado,
-        ], 201);
-    } catch (Exception $e) {
-        if (isset($storedPath) && Storage::disk('public')->exists($storedPath)) {
-            Storage::disk('public')->delete($storedPath);
-        }
-
-        return response()->json(['error' => 'Error en el procesamiento del archivo: ' . $e->getMessage()], 500);
-    }
-}
-
-
-
-    private function limpiarChunksTemporales($tempDir){
-        if (is_dir($tempDir)) {
-            $files = glob($tempDir . '/*');
-            foreach ($files as $file) {
-                if (is_file($file)) {
-                    unlink($file);
-                }
+            if (!$uploadedChunk) {
+                return response()->json(['error' => 'No chunk file uploaded.'], 400);
             }
-            rmdir($tempDir);
+
+            $chunkPath = $tempDir . "/chunk_{$chunkIndex}";
+            $uploadedChunk->move($tempDir, "chunk_{$chunkIndex}");
+
+            // Si es el ultimo chunk, ensamblarlo
+            if ($isLastChunk === 'true' || intval($chunkIndex) == intval($totalChunks) - 1) {
+                $finalPath = storage_path("app/chunks/{$uploadId}_final");
+
+                File::makeDirectory(dirname($finalPath), 0777, true, true);
+
+                $finalFile = fopen($finalPath, 'ab');
+
+                for ($i = 0; $i < $totalChunks; $i++) {
+                    $chunkFilePath = $tempDir . "/chunk_{$i}";
+                    if (!file_exists($chunkFilePath)) {
+                        fclose($finalFile);
+                        File::delete($finalPath);
+                        File::deleteDirectory($tempDir);
+                        return response()->json(['error' => "Falta el chunk {$i}"], 400);
+                    }
+                    fwrite($finalFile, file_get_contents($chunkFilePath));
+                }
+
+                fclose($finalFile);
+
+                $finalUploadedFile = new \Illuminate\Http\UploadedFile(
+                    $finalPath,
+                    $fileName,
+                    null,
+                    null,
+                    true
+                );
+
+                $request->files->set('mundo_comprimido', $finalUploadedFile);
+
+                File::deleteDirectory($tempDir);
+
+                return $this->procesarArchivoFinal($request, $finalUploadedFile);
+            }
+
+            return response()->json(['status' => 'ok', 'message' => "Chunk {$chunkIndex} recibido"], 200);
         }
+
+        $uploadedFile = $request->file('mundo_comprimido');
+
+        if (!$uploadedFile) {
+            return response()->json(['error' => 'No se ha subido ningún archivo "mundo_comprimido".'], 400);
+        }
+
+        return $this->procesarArchivoFinal($request, $uploadedFile);
     }
 
-    private function procesarArchivoCompleto(Request $request){
-        $request->validate([
-            'mundo_comprimido' => 'required|file|mimes:zip,tar,gz|max:4194304', // Max 4096MB
-        ]);
 
+    private function procesarArchivoFinal(Request $request, UploadedFile $uploadedFile)
+    {
         try {
             $storedPath = null;
-            $uploadedFile = $request->file('mundo_comprimido');
 
             if (!$uploadedFile->isValid()) {
-                throw new Exception("Error en la subida del archivo ZIP: Código " . $uploadedFile->getError());
+                throw new Exception("Error en la subida del archivo: Código " . $uploadedFile->getError());
             }
 
             $originalClientName = $uploadedFile->getClientOriginalName();
@@ -182,15 +115,11 @@ private function procesarArchivoFinal(Request $request, UploadedFile $uploadedFi
             if ($fullExtension === 'gz' && Str::endsWith(strtolower($baseNameWithoutAnyExt), '.tar')) {
                 $fullExtension = 'tar.gz';
                 $baseNameWithoutAnyExt = Str::beforeLast($baseNameWithoutAnyExt, '.tar');
-            } elseif ($fullExtension === 'bz2' && Str::endsWith(strtolower($baseNameWithoutAnyExt), '.tar')) {
-                $fullExtension = 'tar.bz2';
-                $baseNameWithoutAnyExt = Str::beforeLast($baseNameWithoutAnyExt, '.tar');
             }
 
             $uniqueId = Str::random(10);
             $fileNameToStore = Str::slug($baseNameWithoutAnyExt) . '_' . $uniqueId . '.' . $fullExtension;
             Storage::disk('public')->makeDirectory('mundos_pendientes');
-
             $storedPath = $uploadedFile->storeAs('mundos_pendientes', $fileNameToStore, 'public');
 
             if (!$storedPath) {
@@ -200,6 +129,12 @@ private function procesarArchivoFinal(Request $request, UploadedFile $uploadedFi
             $tamanoEnBytes = $uploadedFile->getSize();
             $tamanoInicioEnMB = $tamanoEnBytes / (1024 * 1024);
 
+            if (str_starts_with($uploadedFile, '/var/www/storage/app/chunks/')) {
+                if (File::exists($uploadedFile)) {
+                    File::delete($uploadedFile);
+                }
+            }
+
             $servidor = Servidor::create([
                 'ruta' => $storedPath,
                 'estado' => 'pendiente',
@@ -208,24 +143,21 @@ private function procesarArchivoFinal(Request $request, UploadedFile $uploadedFi
                 'ip' => $request->ip(),
             ]);
 
-            $message = "El mundo '{$servidor->id}' ha sido subido y está en cola para ser procesado.";
-            Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($servidor->id, 'subido', $message));
+            Notification::send(new AnonymousNotifiable(), new WorldStatusNotification($servidor->id, 'subido', "Archivo subido por chunks"));
 
             ProcesarMundoServidorJob::dispatch();
 
             return response()->json([
-                'message' => 'Mundo subido con éxito. En cola para la compresion...',
+                'message' => 'Archivo subido y procesado.',
                 'servidor_id' => $servidor->id,
-                //'ruta_almacenada' => $servidor->ruta, 
                 'estado' => $servidor->estado,
-                //'download_url' => Storage::disk('public')->url($servidor->ruta)
             ], 201);
-
         } catch (Exception $e) {
-            if (isset($storedPath) && $storedPath && Storage::disk('public')->exists($storedPath)) {
+            if (isset($storedPath) && Storage::disk('public')->exists($storedPath)) {
                 Storage::disk('public')->delete($storedPath);
             }
-            return response()->json(['error' => 'Ocurrió un error al subir el mundo: ' . $e->getMessage()], 500);
+
+            return response()->json(['error' => 'Error en el procesamiento del archivo: ' . $e->getMessage()], 500);
         }
     }
 
@@ -249,8 +181,8 @@ private function procesarArchivoFinal(Request $request, UploadedFile $uploadedFi
             $responseData['tamano_final'] = $servidor->tamano_final;
         } elseif ($servidor->estado == 'pendiente') {
             $servidoresPendientes = Servidor::where('estado', 'pendiente')
-                                          ->orderBy('fecha_creacion', 'asc')
-                                          ->get();
+                                             ->orderBy('fecha_creacion', 'asc')
+                                             ->get();
             $totalEnCola = $servidoresPendientes->count();
             $posicionEnCola = 0;
 
@@ -272,5 +204,4 @@ private function procesarArchivoFinal(Request $request, UploadedFile $uploadedFi
 
         return response()->json($responseData);
     }
-
 }
