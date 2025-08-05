@@ -3,7 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use App\Console\Commands\LimpiarServidoresExpirados;
+use App\Console\Commands\Limpiza;
 use Illuminate\Console\Scheduling\Schedule;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -19,5 +19,5 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withSchedule(function (Schedule $schedule) {
-        $schedule->command(LimpiarServidoresExpirados::class)->hourly(); //->everyMinute() o ->hourly()
+        $schedule->command(Limpiza::class)->hourly(); //->everyMinute() o ->hourly()
     })->create();
