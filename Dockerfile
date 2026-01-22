@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libonig-dev \
     sqlite3 \
     lz4 \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && docker-php-ext-install -j$(nproc) intl mbstring zip pdo_mysql dom pdo_sqlite \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -48,4 +48,4 @@ RUN echo "\n; Aumentar el timeout para peticiones largas" >> /usr/local/etc/php-
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "npm start & php-fpm"]
+CMD ["sh", "-c", "php-fpm & npm start"]
